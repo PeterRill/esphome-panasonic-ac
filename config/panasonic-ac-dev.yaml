@@ -76,8 +76,8 @@ sensor:
 
 # uart:
 #   id: panasonic_uart
-#   tx_pin: GPIO17
-#   rx_pin: GPIO18
+#   tx_pin: GPIOxx
+#   rx_pin: GPIOxx
 #   baud_rate: 9600
 #   parity: EVEN
 
