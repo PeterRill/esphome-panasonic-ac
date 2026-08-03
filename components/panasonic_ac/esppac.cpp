@@ -11,7 +11,7 @@ climate::ClimateTraits PanasonicAC::traits() {
   auto traits = climate::ClimateTraits();
 
   traits.add_feature_flags(
-      climate::CLIMATE_SUPPORTS_ACTION |
+      // climate::CLIMATE_SUPPORTS_ACTION |
       climate::CLIMATE_SUPPORTS_CURRENT_TEMPERATURE
   );
 

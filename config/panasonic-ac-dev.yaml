@@ -2,6 +2,16 @@ esphome:
   name: panasonic-ac-dev
   friendly_name: Panasonic AC Development
 
+  on_boot:
+    priority: 800
+    then:
+      - light.turn_on:
+          id: status_led
+          red: 0%
+          green: 1%
+          blue: 0%
+          brightness: 5%
+
 esp32:
   board: esp32-s3-devkitc-1
   flash_size: 16MB
@@ -33,80 +43,121 @@ ota:
   - platform: esphome
     password: !secret ota_password
 
+web_server:
+  port: 80
+  version: 3
 
-i2c:
-- id: i2c_bus_a
-  sda: 17
-  scl: 18
-  scan: true
-#  frequency: 50000.0
+light:
+  - platform: esp32_rmt_led_strip
+    id: status_led
+    internal: true
 
-sensor:
-  - platform: sht3xd
-    i2c_id: i2c_bus_a
-    temperature:
-      name: "SHT30: Temperatur"
-      accuracy_decimals: 1
-    humidity:
-      name: "SHT30: Feuchtigkeit"
-      accuracy_decimals: 1
-    address: 0x44
-    update_interval: 10s
+    pin: GPIO48
+    chipset: WS2812
+    num_leds: 1
+    rgb_order: GRB
+
+uart:
+  id: panasonic_uart
+  tx_pin: GPIO20
+  rx_pin: GPIO19
+  baud_rate: 9600
+  parity: EVEN
+
+  debug:
+    direction: both
+    dummy_receiver: false
+    after:
+      timeout: 10ms
+
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components:
+      - panasonic_ac
+
+climate:
+  - platform: panasonic_ac
+    id: panasonic_ac_climate
+    name: Panasonic AC
+
+    # CN-CNT:
+    type: cnt
+
+    horizontal_swing_select:
+      name: Horizontal Swing
+
+    vertical_swing_select:
+      name: Vertical Swing
+
+    outside_temperature:
+      name: Outside Temperature
+
+    defrost_sensor:
+      name: Defrost Status
+
+    nanoex_switch:
+      name: Nanoe X
+
+    current_power_consumption:
+      name: Power Consumption
+
+    operational_status:
+      name: Operational Status
+
+    indoor_humidity:
+      name: Indoor Humidity
+
+    diagnostic_temperature_byte_21:
+      name: Diagnostic Temperature Byte 21
+
+    # eco_switch:
+    #   name: Eco
+
+    # econavi_switch:
+    #   name: Econavi
+
+    # mild_dry_switch:
+    #   name: Mild Dry
+
     
-  - platform: bmp280_i2c
-    i2c_id: i2c_bus_a
-    temperature:
-      name: "BMP280: Temperatur"
-      # oversampling: 16x
-      accuracy_decimals: 1
-    pressure:
-      name: "BMP280: Luftdruck"
-      accuracy_decimals: 1
-    address: 0x76
-    update_interval: 10s
 
-  - platform: wifi_signal
-    name: ESP32 WiFi Signal
-    update_interval: 10s
+# i2c:
+# - id: i2c_bus_a
+#   sda: 17
+#   scl: 18
+#   scan: true
+# #  frequency: 50000.0
 
-  - platform: uptime
-    name: ESP32 Uptime
-    update_interval: 10s
+# sensor:
+#   - platform: sht3xd
+#     i2c_id: i2c_bus_a
+#     temperature:
+#       name: "SHT30: Temperatur"
+#       accuracy_decimals: 1
+#     humidity:
+#       name: "SHT30: Feuchtigkeit"
+#       accuracy_decimals: 1
+#     address: 0x44
+#     update_interval: 10s
+    
+#   - platform: bmp280_i2c
+#     i2c_id: i2c_bus_a
+#     temperature:
+#       name: "BMP280: Temperatur"
+#       # oversampling: 16x
+#       accuracy_decimals: 1
+#     pressure:
+#       name: "BMP280: Luftdruck"
+#       accuracy_decimals: 1
+#     address: 0x76
+#     update_interval: 10s
 
+#   - platform: wifi_signal
+#     name: ESP32 WiFi Signal
+#     update_interval: 10s
 
-# uart:
-#   id: panasonic_uart
-#   tx_pin: GPIOxx
-#   rx_pin: GPIOxx
-#   baud_rate: 9600
-#   parity: EVEN
-
-# external_components:
-#   - source:
-#       type: local
-#       path: ../components
-#     components:
-#       - panasonic_ac
-
-# climate:
-#   - platform: panasonic_ac
-#     id: panasonic_ac_climate
-#     name: Panasonic AC
-
-#     # CN-CNT:
-#     type: cnt
-
-#     # Alternativ für CN-WLAN:
-#     # type: wlan
-
-#     horizontal_swing_select:
-#       name: Horizontal Swing
-
-#     vertical_swing_select:
-#       name: Vertical Swing
-
-#     outside_temperature:
-#       name: Outside Temperature
-
-#     defrost_sensor:
-#       name: Defrost Status
+#   - platform: uptime
+#     name: ESP32 Uptime
+#     update_interval: 10s

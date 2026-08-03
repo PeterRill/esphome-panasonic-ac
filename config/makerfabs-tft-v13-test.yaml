@@ -1,0 +1,178 @@
+esphome:
+  name: makerfabs-tft-v13-test
+  friendly_name: Makerfabs TFT V1.3 Test
+  # Der grosse ESP-IDF/LVGL-Erstbuild ist unter Windows mit vielen parallelen
+  # Compilerprozessen unzuverlaessig; ein Prozess ist langsamer, aber robust.
+  # compile_process_limit: 1
+  on_boot:
+    priority: -100
+    then:
+      - light.turn_on:
+          id: display_backlight
+          brightness: 100%
+
+esp32:
+  board: esp32-s3-devkitc-1
+  flash_size: 16MB
+  framework:
+    type: esp-idf
+
+psram:
+  mode: octal
+  speed: 80MHz
+  ignore_not_found: false
+
+# Fuer den ersten Test absichtlich nur lokal ueber USB/Seriell:
+# keine WiFi-, API-, OTA- oder Home-Assistant-Konfiguration erforderlich.
+logger:
+  level: DEBUG
+  # Der mit "USB-TTL" bezeichnete USB-C-Port haengt ueber den CP2104 an UART0.
+  # hardware_uart: UART0
+  # Nativer USB
+  hardware_uart: USB_SERIAL_JTAG
+
+i2c:
+  id: touch_i2c
+  sda: GPIO17
+  scl: GPIO18
+  frequency: 400kHz
+  scan: true
+
+output:
+  - platform: ledc
+    id: backlight_pwm
+    pin: GPIO2
+    frequency: 1000Hz
+
+light:
+  - platform: monochromatic
+    id: display_backlight
+    name: Display Backlight
+    output: backlight_pwm
+    restore_mode: ALWAYS_ON
+    default_transition_length: 0s
+
+display:
+  - platform: mipi_rgb
+    id: makerfabs_display
+    model: RPI
+    dimensions:
+      width: 800
+      height: 480
+    color_order: RGB
+    pixel_mode: 16bit
+    byte_order: big_endian
+    pclk_frequency: 16MHz
+    pclk_inverted: true
+    de_pin: GPIO40
+    vsync_pin: GPIO41
+    hsync_pin: GPIO39
+    pclk_pin: GPIO42
+    hsync_front_porch: 8
+    hsync_pulse_width: 4
+    hsync_back_porch: 8
+    vsync_front_porch: 8
+    vsync_pulse_width: 4
+    vsync_back_porch: 8
+    data_pins:
+      red:
+        - GPIO45 # R0
+        - GPIO48 # R1
+        - GPIO47 # R2
+        - GPIO21 # R3
+        - GPIO14 # R4
+      green:
+        - GPIO5  # G0
+        - GPIO6  # G1
+        - GPIO7  # G2
+        - GPIO15 # G3
+        - GPIO16 # G4
+        - GPIO4  # G5
+      blue:
+        - GPIO8  # B0
+        - GPIO3  # B1
+        - GPIO46 # B2
+        - GPIO9  # B3
+        - GPIO1  # B4
+    auto_clear_enabled: false
+    update_interval: never
+
+touchscreen:
+  - platform: gt911
+    id: makerfabs_touch
+    display: makerfabs_display
+    i2c_id: touch_i2c
+    address: 0x5D
+    reset_pin: GPIO38
+    transform:
+      mirror_x: true
+      mirror_y: true
+      swap_xy: false
+    on_touch:
+      then:
+        - logger.log:
+            format: "Touch x=%d, y=%d, raw_x=%d, raw_y=%d"
+            args:
+              - touch.x
+              - touch.y
+              - touch.x_raw
+              - touch.y_raw
+        - lvgl.label.update:
+            id: touch_status
+            text:
+              format: "Touch: %d, %d"
+              args:
+                - touch.x
+                - touch.y
+
+lvgl:
+  displays:
+    - makerfabs_display
+  touchscreens:
+    - touchscreen_id: makerfabs_touch
+  bg_color: 0x101820
+  widgets:
+    - label:
+        id: title
+        align: TOP_MID
+        y: 35
+        text: "Makerfabs ESP32-S3 TFT V1.3"
+        text_color: 0xFFFFFF
+        text_font: montserrat_30
+    - label:
+        align: TOP_MID
+        y: 90
+        text: "800 x 480 RGB + GT911"
+        text_color: 0xA7C7E7
+        text_font: montserrat_22
+    - button:
+        id: touch_test_button
+        align: CENTER
+        width: 360
+        height: 130
+        bg_color: 0x1565C0
+        pressed:
+          bg_color: 0x2E7D32
+        widgets:
+          - label:
+              align: CENTER
+              text: "TOUCH TEST"
+              text_color: 0xFFFFFF
+              text_font: montserrat_30
+        on_press:
+          then:
+            - lvgl.label.update:
+                id: touch_status
+                text: "Button gedrueckt"
+        on_release:
+          then:
+            - lvgl.label.update:
+                id: touch_status
+                text: "Touch erkannt"
+    - label:
+        id: touch_status
+        align: BOTTOM_MID
+        y: -45
+        text: "Display aktiv - bitte Bildschirm beruehren"
+        text_color: 0xFFFFFF
+        text_font: montserrat_22

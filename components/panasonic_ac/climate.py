@@ -1,15 +1,17 @@
 from esphome.const import (
+    DEVICE_CLASS_HUMIDITY,
     DEVICE_CLASS_TEMPERATURE,
     DEVICE_CLASS_POWER,
     STATE_CLASS_MEASUREMENT,
     UNIT_CELSIUS,
+    UNIT_PERCENT,
     UNIT_WATT,
 )
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.components import uart, climate, sensor, select, switch, binary_sensor
+from esphome.components import uart, climate, sensor, select, switch, binary_sensor, text_sensor
 
-AUTO_LOAD = ["switch", "sensor", "select", "binary_sensor"]
+AUTO_LOAD = ["switch", "sensor", "select", "binary_sensor", "text_sensor"]
 DEPENDENCIES = ["uart"]
 
 panasonic_ac_ns = cg.esphome_ns.namespace("panasonic_ac")
@@ -43,6 +45,9 @@ CONF_CURRENT_POWER_CONSUMPTION = "current_power_consumption"
 CONF_DEFROST_SENSOR = "defrost_sensor"
 CONF_WLAN = "wlan"
 CONF_CNT = "cnt"
+CONF_OPERATIONAL_STATUS = "operational_status"
+CONF_INDOOR_HUMIDITY = "indoor_humidity"
+CONF_DIAGNOSTIC_TEMPERATURE_BYTE_21 = "diagnostic_temperature_byte_21"
 
 HORIZONTAL_SWING_OPTIONS = ["auto", "left", "left_center", "center", "right_center", "right"]
 
@@ -76,6 +81,19 @@ PANASONIC_CNT_SCHEMA = {
         unit_of_measurement=UNIT_WATT,
         accuracy_decimals=0,
         device_class=DEVICE_CLASS_POWER,
+        state_class=STATE_CLASS_MEASUREMENT,
+    ),
+    cv.Optional(CONF_OPERATIONAL_STATUS): text_sensor.text_sensor_schema(),
+    cv.Optional(CONF_INDOOR_HUMIDITY): sensor.sensor_schema(
+        unit_of_measurement=UNIT_PERCENT,
+        accuracy_decimals=0,
+        device_class=DEVICE_CLASS_HUMIDITY,
+        state_class=STATE_CLASS_MEASUREMENT,
+    ),
+    cv.Optional(CONF_DIAGNOSTIC_TEMPERATURE_BYTE_21): sensor.sensor_schema(
+        unit_of_measurement=UNIT_CELSIUS,
+        accuracy_decimals=0,
+        device_class=DEVICE_CLASS_TEMPERATURE,
         state_class=STATE_CLASS_MEASUREMENT,
     ),
 }
@@ -133,3 +151,15 @@ async def to_code(config):
     if CONF_CURRENT_POWER_CONSUMPTION in config:
         sens = await sensor.new_sensor(config[CONF_CURRENT_POWER_CONSUMPTION])
         cg.add(var.set_current_power_consumption_sensor(sens))
+
+    if CONF_OPERATIONAL_STATUS in config:
+        sens = await text_sensor.new_text_sensor(config[CONF_OPERATIONAL_STATUS])
+        cg.add(var.set_operational_status_sensor(sens))
+
+    if CONF_INDOOR_HUMIDITY in config:
+        sens = await sensor.new_sensor(config[CONF_INDOOR_HUMIDITY])
+        cg.add(var.set_indoor_humidity_sensor(sens))
+
+    if CONF_DIAGNOSTIC_TEMPERATURE_BYTE_21 in config:
+        sens = await sensor.new_sensor(config[CONF_DIAGNOSTIC_TEMPERATURE_BYTE_21])
+        cg.add(var.set_diagnostic_temperature_byte_21_sensor(sens))

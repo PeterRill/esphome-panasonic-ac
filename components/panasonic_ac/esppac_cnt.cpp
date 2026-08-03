@@ -33,6 +33,40 @@ static climate::ClimateMode determine_mode(uint8_t mode) {
   }
 }
 
+static const char *determine_operational_status(uint8_t status)
+{
+  switch (status)
+  {
+  case 0x4C:
+    return "Heat Running";
+  case 0x48:
+    return "Heat Startup";
+  case 0x44:
+    return "Heat Transition";
+  case 0x40:
+    return "Heat Idle";
+
+  case 0x3C:
+    return "Cool Running";
+  case 0x38:
+    return "Cool Startup";
+  case 0x34:
+    return "Cool Transition";
+  case 0x30:
+    return "Cool Idle";
+
+  case 0x08:
+    return "Fan Only";
+  case 0x04:
+    return "Power-down Transition";
+  case 0x00:
+    return "Off";
+
+  default:
+    return nullptr;
+  }
+}
+
 static const char *determine_fan_speed(uint8_t speed) {
   switch (speed) {
     case 0xA0:  // Auto
@@ -267,8 +301,9 @@ void PanasonicACCNT::control(const climate::ClimateCall &call) {
       this->cmd[3] = 0x60;
     else if (fanMode == "5")
       this->cmd[3] = 0x70;
-    else
+    else {
       ESP_LOGV(TAG, "Unsupported fan mode requested");
+    }
   }
 
   if (call.get_swing_mode().has_value()) {
@@ -304,8 +339,9 @@ void PanasonicACCNT::control(const climate::ClimateCall &call) {
       this->cmd[5] = (this->cmd[5] & 0xF0) + 0x02;  // Clear right nib and set powerful mode
     else if (preset == "Quiet")
       this->cmd[5] = (this->cmd[5] & 0xF0) + 0x04;  // Clear right nib and set quiet mode
-    else
+    else {
       ESP_LOGV(TAG, "Unsupported preset requested");
+    }
   }
 }
 
@@ -335,8 +371,9 @@ void PanasonicACCNT::set_data(bool set) {
         this->update_current_temperature((int8_t) this->rx_buffer_[18]);
       else if (this->rx_buffer_[21] != 0x80)
         this->update_current_temperature((int8_t) this->rx_buffer_[21]);
-      else
+      else {
         ESP_LOGV(TAG, "Current temperature is not supported");
+      }
     }
 
     if (this->outside_temperature_sensor_ != nullptr) {
@@ -344,8 +381,25 @@ void PanasonicACCNT::set_data(bool set) {
         this->update_outside_temperature((int8_t) this->rx_buffer_[19]);
       else if (this->rx_buffer_[22] != 0x80)
         this->update_outside_temperature((int8_t) this->rx_buffer_[22]);
-      else
+      else {
         ESP_LOGV(TAG, "Outside temperature is not supported");
+      }
+    }
+
+    if (this->indoor_humidity_sensor_ != nullptr) {
+      if (this->rx_buffer_.size() > 20 && this->rx_buffer_[20] != 0x80) {
+        this->indoor_humidity_sensor_->publish_state(this->rx_buffer_[20]);
+      } else {
+        ESP_LOGV(TAG, "Indoor humidity is not supported");
+      }
+    }
+
+    if (this->diagnostic_temperature_byte_21_sensor_ != nullptr) {
+      if (this->rx_buffer_.size() > 21 && this->rx_buffer_[21] != 0x80) {
+        this->diagnostic_temperature_byte_21_sensor_->publish_state((int8_t) this->rx_buffer_[21]);
+      } else {
+        ESP_LOGV(TAG, "Diagnostic temperature byte 21 is not supported");
+      }
     }
 
     if (this->current_power_consumption_sensor_ != nullptr) {
@@ -360,6 +414,37 @@ void PanasonicACCNT::set_data(bool set) {
         update_defrost(defrost);
       } else {
         ESP_LOGV(TAG, "Defrost status is not supported");
+      }
+    }
+
+    if (this->operational_status_sensor_ != nullptr)
+    {
+      if (this->rx_buffer_.size() > 12)
+      {
+        const uint8_t raw_status = this->rx_buffer_[12];
+        const char *status = determine_operational_status(raw_status);
+
+        if (status != nullptr)
+        {
+          if (this->operational_status_sensor_->state != status)
+          {
+            this->operational_status_sensor_->publish_state(status);
+          }
+          ESP_LOGD(
+              TAG,
+              "Operational status: %s (0x%02X)",
+              status,
+              raw_status);
+        }
+        else
+        {
+          ESP_LOGW(TAG, "Received unknown operational status: 0x%02X", raw_status);
+          this->operational_status_sensor_->publish_state("Unknown");
+        }
+      }
+      else
+      {
+        ESP_LOGW(TAG, "Packet too short for operational status");
       }
     }
   }
@@ -382,7 +467,7 @@ void PanasonicACCNT::set_data(bool set) {
   this->update_eco(eco);
   this->update_econavi(econavi);
   this->update_mild_dry(mildDry);
-  this->action = this->determine_action();
+  // this->action = this->determine_action();
 }
 
 /*

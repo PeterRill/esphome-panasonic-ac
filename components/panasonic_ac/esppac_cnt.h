@@ -1,5 +1,7 @@
 #include "esphome/components/climate/climate.h"
 #include "esphome/components/climate/climate_mode.h"
+#include "esphome/components/sensor/sensor.h"
+#include "esphome/components/text_sensor/text_sensor.h"
 #include "esppac.h"
 
 namespace esphome {
@@ -28,6 +30,15 @@ class PanasonicACCNT : public PanasonicAC {
   void on_econavi_change(bool eco) override;
   void on_mild_dry_change(bool mild_dry) override;
 
+  void set_operational_status_sensor(text_sensor::TextSensor *sensor)
+  {
+    this->operational_status_sensor_ = sensor;
+  }
+  void set_indoor_humidity_sensor(sensor::Sensor *sensor) { this->indoor_humidity_sensor_ = sensor; }
+  void set_diagnostic_temperature_byte_21_sensor(sensor::Sensor *sensor) {
+    this->diagnostic_temperature_byte_21_sensor_ = sensor;
+  }
+
   void setup() override;
   void loop() override;
 
@@ -37,6 +48,10 @@ class PanasonicACCNT : public PanasonicAC {
   // uint8_t data[10];
   std::vector<uint8_t> data = std::vector<uint8_t>(10);  // Stores the data received from the AC
   std::vector<uint8_t> cmd;                              // Used to build next command
+
+  text_sensor::TextSensor *operational_status_sensor_{nullptr};
+  sensor::Sensor *indoor_humidity_sensor_{nullptr};
+  sensor::Sensor *diagnostic_temperature_byte_21_sensor_{nullptr};
 
   void handle_poll();
   void handle_cmd();
