@@ -56,6 +56,8 @@ static const char *determine_operational_status(uint8_t status)
     return "Cool Idle";
 
   case 0x08:
+    return "Fan Only (Unit Off)";
+  case 0x60:
     return "Fan Only";
   case 0x04:
     return "Power-down Transition";
