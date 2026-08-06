@@ -18,3 +18,8 @@ builds/
 
 # Local credentials
 config/secrets.yaml
+config/makerfabs-tft-v13-test copy.yaml
+config/makerfabs-tft-v13-test.yaml
+.gitignore
+config/select_button.yaml
+README.MAKERFABS-TFT-V13.md
