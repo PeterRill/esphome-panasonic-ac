@@ -115,15 +115,23 @@ void PanasonicACWLAN::control(const climate::ClimateCall &call) {
     set_value(0x31, (*call.get_target_temperature() - this->current_temperature_offset_) * 2);
   }
 
+  if (call.get_fan_mode().has_value()) {
+    ESP_LOGV(TAG, "Requested fan mode change");
+
+    if (*call.get_fan_mode() == climate::CLIMATE_FAN_AUTO) {
+      set_value(0xB2, 0x41);
+      set_value(0xA0, 0x41);
+    } else {
+      ESP_LOGV(TAG, "Unsupported fan mode requested");
+    }
+  }
+
   if (call.has_custom_fan_mode()) {
     ESP_LOGV(TAG, "Requested fan mode change");
 
     const StringRef fanMode = call.get_custom_fan_mode();
 
-    if (fanMode == "Automatic") {
-      set_value(0xB2, 0x41);
-      set_value(0xA0, 0x41);
-    } else if (fanMode == "1") {
+    if (fanMode == "1") {
       set_value(0xB2, 0x41);
       set_value(0xA0, 0x32);
     } else if (fanMode == "2") {
@@ -138,34 +146,20 @@ void PanasonicACWLAN::control(const climate::ClimateCall &call) {
     } else if (fanMode == "5") {
       set_value(0xB2, 0x41);
       set_value(0xA0, 0x36);
-    } else
+    } else {
       ESP_LOGV(TAG, "Unsupported fan mode requested");
+    }
   }
 
-  if (call.get_swing_mode().has_value()) {
-    ESP_LOGV(TAG, "Requested swing mode change");
+  if (call.get_preset().has_value()) {
+    ESP_LOGV(TAG, "Requested preset change");
 
-    switch (*call.get_swing_mode()) {
-      case climate::CLIMATE_SWING_BOTH:
-        set_value(0xA1, 0x41);
-        break;
-      case climate::CLIMATE_SWING_OFF:
-        set_value(0xA1, 0x42);
-        set_value(0xA4, 0x43);
-        set_value(0xA5, 0x43);
-        set_value(0x35, 0x42);
-        break;
-      case climate::CLIMATE_SWING_VERTICAL:
-        set_value(0xA1, 0x43);
-        set_value(0xA5, 0x43);
-        break;
-      case climate::CLIMATE_SWING_HORIZONTAL:
-        set_value(0xA1, 0x44);
-        set_value(0xA4, 0x43);
-        break;
-      default:
-        ESP_LOGV(TAG, "Unsupported swing mode requested");
-        break;
+    if (*call.get_preset() == climate::CLIMATE_PRESET_NONE) {
+      set_value(0xB2, 0x41);
+      set_value(0x35, 0x42);
+      set_value(0x34, 0x42);
+    } else {
+      ESP_LOGV(TAG, "Unsupported preset requested");
     }
   }
 
@@ -174,20 +168,17 @@ void PanasonicACWLAN::control(const climate::ClimateCall &call) {
 
     const StringRef preset = call.get_custom_preset();
 
-    if (preset == "Normal") {
-      set_value(0xB2, 0x41);
-      set_value(0x35, 0x42);
-      set_value(0x34, 0x42);
-    } else if (preset == "Powerful") {
-      set_value(0xB2, 0x42);
-      set_value(0x35, 0x42);
-      set_value(0x34, 0x42);
-    } else if (preset == "Quiet") {
+    if (preset == "quiet") {
       set_value(0xB2, 0x43);
       set_value(0x35, 0x42);
       set_value(0x34, 0x42);
-    } else
+    } else if (preset == "powerful") {
+      set_value(0xB2, 0x42);
+      set_value(0x35, 0x42);
+      set_value(0x34, 0x42);
+    } else {
       ESP_LOGV(TAG, "Unsupported preset requested");
+    }
   }
 
   if (this->set_queue_index_ > 0)  // Only send packet if any changes need to be made
@@ -331,25 +322,20 @@ static const char *determine_fan_speed(uint8_t speed) {
       return "4";
     case 0x36:  // 5
       return "5";
-    case 0x41:  // Auto
-      return "Automatic";
     default:
       ESP_LOGW(TAG, "Received unknown fan speed");
       return "Unknown";
   }
 }
 
-static const char *determine_preset(uint8_t preset) {
+static const char *determine_custom_preset(uint8_t preset) {
   switch (preset) {
     case 0x43:  // Quiet
-      return "Quiet";
+      return "quiet";
     case 0x42:  // Powerful
-      return "Powerful";
-    case 0x41:  // Normal
-      return "Normal";
+      return "powerful";
     default:
-      ESP_LOGW(TAG, "Received unknown preset");
-      return "Normal";
+      return nullptr;
   }
 }
 
@@ -386,22 +372,6 @@ static const char *determine_swing_horizontal(uint8_t swing) {
     default:
       ESP_LOGW(TAG, "Received unknown horizontal swing position");
       return "Unknown";
-  }
-}
-
-static climate::ClimateSwingMode determine_swing(uint8_t swing) {
-  switch (swing) {
-    case 0x41:  // Both
-      return climate::CLIMATE_SWING_BOTH;
-    case 0x42:  // Off
-      return climate::CLIMATE_SWING_OFF;
-    case 0x43:  // Vertical
-      return climate::CLIMATE_SWING_VERTICAL;
-    case 0x44:  // Horizontal
-      return climate::CLIMATE_SWING_HORIZONTAL;
-    default:
-      ESP_LOGW(TAG, "Received unknown swing mode");
-      return climate::CLIMATE_SWING_OFF;
   }
 }
 
@@ -452,10 +422,17 @@ void PanasonicACWLAN::handle_packet() {
 
     update_nanoex(nanoex);
 
-    this->set_custom_fan_mode_(determine_fan_speed(this->rx_buffer_[26]));
-    this->set_custom_preset_(determine_preset(this->rx_buffer_[42]));
+    if (this->rx_buffer_[26] == 0x41)
+      this->set_fan_mode_(climate::CLIMATE_FAN_AUTO);
+    else
+      this->set_custom_fan_mode_(determine_fan_speed(this->rx_buffer_[26]));
 
-    this->swing_mode = determine_swing(this->rx_buffer_[30]);
+    if (this->rx_buffer_[42] == 0x41)
+      this->set_preset_(climate::CLIMATE_PRESET_NONE);
+    else if (const char *custom_preset = determine_custom_preset(this->rx_buffer_[42]))
+      this->set_custom_preset_(custom_preset);
+    else
+      ESP_LOGW(TAG, "Received unknown preset: 0x%02X", this->rx_buffer_[42]);
 
     // climate::ClimateAction action = determine_action(); // Determine the current action of the AC
     // this->action = action;
@@ -511,15 +488,22 @@ void PanasonicACWLAN::handle_packet() {
           break;
         case 0xA0:  // Fan speed
           ESP_LOGV(TAG, "Received fan speed");
-          this->set_custom_fan_mode_(determine_fan_speed(this->rx_buffer_[currentIndex + 2]));
+          if (this->rx_buffer_[currentIndex + 2] == 0x41)
+            this->set_fan_mode_(climate::CLIMATE_FAN_AUTO);
+          else
+            this->set_custom_fan_mode_(determine_fan_speed(this->rx_buffer_[currentIndex + 2]));
           break;
         case 0xB2:  // Preset
           ESP_LOGV(TAG, "Received preset");
-          this->set_custom_preset_(determine_preset(this->rx_buffer_[currentIndex + 2]));
+          if (this->rx_buffer_[currentIndex + 2] == 0x41)
+            this->set_preset_(climate::CLIMATE_PRESET_NONE);
+          else if (const char *custom_preset = determine_custom_preset(this->rx_buffer_[currentIndex + 2]))
+            this->set_custom_preset_(custom_preset);
+          else
+            ESP_LOGW(TAG, "Received unknown preset: 0x%02X", this->rx_buffer_[currentIndex + 2]);
           break;
         case 0xA1:
           ESP_LOGV(TAG, "Received swing mode");
-          this->swing_mode = determine_swing(this->rx_buffer_[currentIndex + 2]);
           break;
         case 0xA5:  // Horizontal swing position
           ESP_LOGV(TAG, "Received horizontal swing position");

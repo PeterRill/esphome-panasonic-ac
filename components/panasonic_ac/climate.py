@@ -48,6 +48,7 @@ CONF_CNT = "cnt"
 CONF_OPERATIONAL_STATUS = "operational_status"
 CONF_INDOOR_HUMIDITY = "indoor_humidity"
 CONF_DIAGNOSTIC_TEMPERATURE_BYTE_21 = "diagnostic_temperature_byte_21"
+CONF_OPTION_LABELS = "option_labels"
 
 HORIZONTAL_SWING_OPTIONS = ["auto", "left", "left_center", "center", "right_center", "right"]
 
@@ -55,11 +56,29 @@ VERTICAL_SWING_OPTIONS = ["swing", "auto", "up", "up_center", "center", "down_ce
 
 SWITCH_SCHEMA = switch.switch_schema(PanasonicACSwitch).extend(cv.COMPONENT_SCHEMA)
 
-SELECT_SCHEMA = select.select_schema(PanasonicACSelect)
+HORIZONTAL_SWING_SELECT_SCHEMA = select.select_schema(
+    PanasonicACSelect, icon="mdi:arrow-left-right"
+).extend(
+    {
+        cv.Optional(CONF_OPTION_LABELS): cv.Schema(
+            {cv.Optional(option): cv.string_strict for option in HORIZONTAL_SWING_OPTIONS}
+        )
+    }
+)
+
+VERTICAL_SWING_SELECT_SCHEMA = select.select_schema(
+    PanasonicACSelect, icon="mdi:arrow-up-down"
+).extend(
+    {
+        cv.Optional(CONF_OPTION_LABELS): cv.Schema(
+            {cv.Optional(option): cv.string_strict for option in VERTICAL_SWING_OPTIONS}
+        )
+    }
+)
 
 PANASONIC_COMMON_SCHEMA = {
-    cv.Optional(CONF_HORIZONTAL_SWING_SELECT): SELECT_SCHEMA,
-    cv.Optional(CONF_VERTICAL_SWING_SELECT): SELECT_SCHEMA,
+    cv.Optional(CONF_HORIZONTAL_SWING_SELECT): HORIZONTAL_SWING_SELECT_SCHEMA,
+    cv.Optional(CONF_VERTICAL_SWING_SELECT): VERTICAL_SWING_SELECT_SCHEMA,
     cv.Optional(CONF_OUTSIDE_TEMPERATURE): sensor.sensor_schema(
         unit_of_measurement=UNIT_CELSIUS,
         accuracy_decimals=0,
@@ -113,13 +132,17 @@ async def to_code(config):
 
     if CONF_HORIZONTAL_SWING_SELECT in config:
         conf = config[CONF_HORIZONTAL_SWING_SELECT]
-        swing_select = await select.new_select(conf, options=HORIZONTAL_SWING_OPTIONS)
+        labels = conf.get(CONF_OPTION_LABELS, {})
+        options = [labels.get(option, option) for option in HORIZONTAL_SWING_OPTIONS]
+        swing_select = await select.new_select(conf, options=options)
         await cg.register_component(swing_select, conf)
         cg.add(var.set_horizontal_swing_select(swing_select))
 
     if CONF_VERTICAL_SWING_SELECT in config:
         conf = config[CONF_VERTICAL_SWING_SELECT]
-        swing_select = await select.new_select(conf, options=VERTICAL_SWING_OPTIONS)
+        labels = conf.get(CONF_OPTION_LABELS, {})
+        options = [labels.get(option, option) for option in VERTICAL_SWING_OPTIONS]
+        swing_select = await select.new_select(conf, options=options)
         await cg.register_component(swing_select, conf)
         cg.add(var.set_vertical_swing_select(swing_select))
 

@@ -7,6 +7,17 @@ namespace panasonic_ac {
 
 static const char *const TAG = "panasonic_ac";
 
+static const char *const HORIZONTAL_SWING_OPTIONS[] = {"auto", "left", "left_center", "center", "right_center", "right"};
+static const char *const VERTICAL_SWING_OPTIONS[] = {"swing", "auto", "up", "up_center", "center", "down_center", "down"};
+
+template<size_t N> static size_t option_index(const StringRef &option, const char *const (&options)[N]) {
+  for (size_t index = 0; index < N; index++) {
+    if (option == options[index])
+      return index;
+  }
+  return ~0UL;
+}
+
 climate::ClimateTraits PanasonicAC::traits() {
   auto traits = climate::ClimateTraits();
 
@@ -22,8 +33,8 @@ climate::ClimateTraits PanasonicAC::traits() {
   traits.set_supported_modes({climate::CLIMATE_MODE_OFF, climate::CLIMATE_MODE_HEAT_COOL, climate::CLIMATE_MODE_COOL,
                               climate::CLIMATE_MODE_HEAT, climate::CLIMATE_MODE_FAN_ONLY, climate::CLIMATE_MODE_DRY});
 
-  traits.set_supported_swing_modes({climate::CLIMATE_SWING_OFF, climate::CLIMATE_SWING_BOTH,
-                                    climate::CLIMATE_SWING_VERTICAL, climate::CLIMATE_SWING_HORIZONTAL});
+  traits.set_supported_fan_modes({climate::CLIMATE_FAN_AUTO});
+  traits.set_supported_presets({climate::CLIMATE_PRESET_NONE});
 
   return traits;
 }
@@ -33,8 +44,8 @@ void PanasonicAC::setup() {
   this->init_time_ = millis();
   this->last_packet_sent_ = millis();
 
-  this->set_supported_custom_fan_modes({"Automatic", "1", "2", "3", "4", "5"});
-  this->set_supported_custom_presets({"Normal", "Powerful", "Quiet"});
+  this->set_supported_custom_fan_modes({"1", "2", "3", "4", "5"});
+  this->set_supported_custom_presets({"quiet", "powerful"});
 
   ESP_LOGI(TAG, "Panasonic AC component v%s starting...", VERSION);
 }
@@ -106,7 +117,12 @@ void PanasonicAC::update_target_temperature(uint8_t raw_value) {
 
 void PanasonicAC::update_swing_horizontal(const StringRef &swing) {
   if (this->horizontal_swing_select_ != nullptr) {
-    this->horizontal_swing_state_ = this->horizontal_swing_select_->index_of(swing).value_or(~0UL);
+    this->horizontal_swing_state_ = option_index(swing, HORIZONTAL_SWING_OPTIONS);
+
+    if (this->horizontal_swing_state_ == ~0UL) {
+      ESP_LOGW(TAG, "Received unknown horizontal swing position: %s", swing.c_str());
+      return;
+    }
 
     if (this->horizontal_swing_state_ != this->horizontal_swing_select_->active_index().value_or(~0UL)) {
       this->horizontal_swing_select_->publish_state(this->horizontal_swing_state_);  // Set current horizontal swing position
@@ -116,7 +132,12 @@ void PanasonicAC::update_swing_horizontal(const StringRef &swing) {
 
 void PanasonicAC::update_swing_vertical(const StringRef &swing) {
   if (this->vertical_swing_select_ != nullptr) {
-    this->vertical_swing_state_ = this->vertical_swing_select_->index_of(swing).value_or(~0UL);
+    this->vertical_swing_state_ = option_index(swing, VERTICAL_SWING_OPTIONS);
+
+    if (this->vertical_swing_state_ == ~0UL) {
+      ESP_LOGW(TAG, "Received unknown vertical swing position: %s", swing.c_str());
+      return;
+    }
 
     if (this->vertical_swing_state_ != this->vertical_swing_select_->active_index().value_or(~0UL)) {
       this->vertical_swing_select_->publish_state(this->vertical_swing_state_);  // Set current vertical swing position
@@ -225,7 +246,11 @@ void PanasonicAC::set_vertical_swing_select(select::Select *vertical_swing_selec
   this->vertical_swing_select_->add_on_state_callback([this](size_t index) {
     if (index == this->vertical_swing_state_)
       return;
-    this->on_vertical_swing_change(this->vertical_swing_select_->current_option());
+    if (index >= sizeof(VERTICAL_SWING_OPTIONS) / sizeof(VERTICAL_SWING_OPTIONS[0])) {
+      ESP_LOGW(TAG, "Selected invalid vertical swing option index: %u", index);
+      return;
+    }
+    this->on_vertical_swing_change(StringRef(VERTICAL_SWING_OPTIONS[index]));
   });
 }
 
@@ -234,7 +259,11 @@ void PanasonicAC::set_horizontal_swing_select(select::Select *horizontal_swing_s
   this->horizontal_swing_select_->add_on_state_callback([this](size_t index) {
     if (index == this->horizontal_swing_state_)
       return;
-    this->on_horizontal_swing_change(this->horizontal_swing_select_->current_option());
+    if (index >= sizeof(HORIZONTAL_SWING_OPTIONS) / sizeof(HORIZONTAL_SWING_OPTIONS[0])) {
+      ESP_LOGW(TAG, "Selected invalid horizontal swing option index: %u", index);
+      return;
+    }
+    this->on_horizontal_swing_change(StringRef(HORIZONTAL_SWING_OPTIONS[index]));
   });
 }
 
