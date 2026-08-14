@@ -168,11 +168,11 @@ void PanasonicACWLAN::control(const climate::ClimateCall &call) {
 
     const StringRef preset = call.get_custom_preset();
 
-    if (preset == "quiet") {
+    if (preset == "Quiet") {
       set_value(0xB2, 0x43);
       set_value(0x35, 0x42);
       set_value(0x34, 0x42);
-    } else if (preset == "powerful") {
+    } else if (preset == "Powerful") {
       set_value(0xB2, 0x42);
       set_value(0x35, 0x42);
       set_value(0x34, 0x42);
@@ -331,9 +331,9 @@ static const char *determine_fan_speed(uint8_t speed) {
 static const char *determine_custom_preset(uint8_t preset) {
   switch (preset) {
     case 0x43:  // Quiet
-      return "quiet";
+      return "Quiet";
     case 0x42:  // Powerful
-      return "powerful";
+      return "Powerful";
     default:
       return nullptr;
   }

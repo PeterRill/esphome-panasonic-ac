@@ -144,9 +144,9 @@ static const char *determine_custom_preset(uint8_t preset) {
 
   switch (nib) {
     case 0x04:
-      return "quiet";
+      return "Quiet";
     case 0x02:
-      return "powerful";
+      return "Powerful";
     default:
       return nullptr;
   }
@@ -326,9 +326,9 @@ void PanasonicACCNT::control(const climate::ClimateCall &call) {
 
     const auto preset = call.get_custom_preset();
 
-    if (preset == "quiet")
+    if (preset == "Quiet")
       this->cmd[5] = (this->cmd[5] & 0xF0) | 0x04;
-    else if (preset == "powerful")
+    else if (preset == "Powerful")
       this->cmd[5] = (this->cmd[5] & 0xF0) | 0x02;
     else {
       ESP_LOGV(TAG, "Unsupported preset requested");

@@ -45,7 +45,7 @@ void PanasonicAC::setup() {
   this->last_packet_sent_ = millis();
 
   this->set_supported_custom_fan_modes({"1", "2", "3", "4", "5"});
-  this->set_supported_custom_presets({"quiet", "powerful"});
+  this->set_supported_custom_presets({"Quiet", "Powerful"});
 
   ESP_LOGI(TAG, "Panasonic AC component v%s starting...", VERSION);
 }
