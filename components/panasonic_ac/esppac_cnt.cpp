@@ -271,6 +271,8 @@ void PanasonicACCNT::control(const climate::ClimateCall &call) {
         ESP_LOGV(TAG, "Unsupported mode requested");
         break;
     }
+
+    this->enforce_vertical_swing_limit(*call.get_mode());
   }
 
   if (call.get_target_temperature().has_value()) {

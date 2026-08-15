@@ -49,10 +49,32 @@ CONF_OPERATIONAL_STATUS = "operational_status"
 CONF_INDOOR_HUMIDITY = "indoor_humidity"
 CONF_DIAGNOSTIC_TEMPERATURE_BYTE_21 = "diagnostic_temperature_byte_21"
 CONF_OPTION_LABELS = "option_labels"
+CONF_LIMIT_VERTICAL_SWING_COOL = "limit_vertical_swing_cool"
+CONF_LIMIT_VERTICAL_SWING_HEAT = "limit_vertical_swing_heat"
 
 HORIZONTAL_SWING_OPTIONS = ["auto", "left", "left_center", "center", "right_center", "right"]
 
 VERTICAL_SWING_OPTIONS = ["swing", "auto", "up", "up_center", "center", "down_center", "down"]
+
+
+def validate_vertical_swing_limit(value):
+    options = cv.ensure_list(cv.one_of(*VERTICAL_SWING_OPTIONS, lower=True))(value)
+    if not options:
+        raise cv.Invalid("At least one vertical swing option must be allowed")
+    if len(options) != len(set(options)):
+        raise cv.Invalid("Vertical swing limit options must not contain duplicates")
+    return options
+
+
+def validate_vertical_swing_limits(config):
+    if (
+        CONF_LIMIT_VERTICAL_SWING_COOL in config
+        or CONF_LIMIT_VERTICAL_SWING_HEAT in config
+    ) and CONF_VERTICAL_SWING_SELECT not in config:
+        raise cv.Invalid(
+            "vertical_swing_select is required when a vertical swing limit is configured"
+        )
+    return config
 
 SWITCH_SCHEMA = switch.switch_schema(PanasonicACSwitch).extend(cv.COMPONENT_SCHEMA)
 
@@ -79,6 +101,8 @@ VERTICAL_SWING_SELECT_SCHEMA = select.select_schema(
 PANASONIC_COMMON_SCHEMA = {
     cv.Optional(CONF_HORIZONTAL_SWING_SELECT): HORIZONTAL_SWING_SELECT_SCHEMA,
     cv.Optional(CONF_VERTICAL_SWING_SELECT): VERTICAL_SWING_SELECT_SCHEMA,
+    cv.Optional(CONF_LIMIT_VERTICAL_SWING_COOL): validate_vertical_swing_limit,
+    cv.Optional(CONF_LIMIT_VERTICAL_SWING_HEAT): validate_vertical_swing_limit,
     cv.Optional(CONF_OUTSIDE_TEMPERATURE): sensor.sensor_schema(
         unit_of_measurement=UNIT_CELSIUS,
         accuracy_decimals=0,
@@ -117,11 +141,14 @@ PANASONIC_CNT_SCHEMA = {
     ),
 }
 
-CONFIG_SCHEMA = cv.typed_schema(
-    {
-        CONF_WLAN: climate.climate_schema(PanasonicACWLAN).extend(PANASONIC_COMMON_SCHEMA).extend(uart.UART_DEVICE_SCHEMA),
-        CONF_CNT: climate.climate_schema(PanasonicACCNT).extend(PANASONIC_COMMON_SCHEMA).extend(PANASONIC_CNT_SCHEMA).extend(uart.UART_DEVICE_SCHEMA),
-    }
+CONFIG_SCHEMA = cv.All(
+    cv.typed_schema(
+        {
+            CONF_WLAN: climate.climate_schema(PanasonicACWLAN).extend(PANASONIC_COMMON_SCHEMA).extend(uart.UART_DEVICE_SCHEMA),
+            CONF_CNT: climate.climate_schema(PanasonicACCNT).extend(PANASONIC_COMMON_SCHEMA).extend(PANASONIC_CNT_SCHEMA).extend(uart.UART_DEVICE_SCHEMA),
+        }
+    ),
+    validate_vertical_swing_limits,
 )
 
 
@@ -145,6 +172,12 @@ async def to_code(config):
         swing_select = await select.new_select(conf, options=options)
         await cg.register_component(swing_select, conf)
         cg.add(var.set_vertical_swing_select(swing_select))
+
+    for option in config.get(CONF_LIMIT_VERTICAL_SWING_COOL, []):
+        cg.add(var.add_vertical_swing_cool_limit(VERTICAL_SWING_OPTIONS.index(option)))
+
+    for option in config.get(CONF_LIMIT_VERTICAL_SWING_HEAT, []):
+        cg.add(var.add_vertical_swing_heat_limit(VERTICAL_SWING_OPTIONS.index(option)))
 
     if CONF_OUTSIDE_TEMPERATURE in config:
         sens = await sensor.new_sensor(config[CONF_OUTSIDE_TEMPERATURE])

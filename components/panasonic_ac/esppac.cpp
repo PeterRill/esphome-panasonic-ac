@@ -2,6 +2,8 @@
 
 #include "esphome/core/log.h"
 
+#include <algorithm>
+
 namespace esphome {
 namespace panasonic_ac {
 
@@ -132,17 +134,86 @@ void PanasonicAC::update_swing_horizontal(const StringRef &swing) {
 
 void PanasonicAC::update_swing_vertical(const StringRef &swing) {
   if (this->vertical_swing_select_ != nullptr) {
-    this->vertical_swing_state_ = option_index(swing, VERTICAL_SWING_OPTIONS);
+    const size_t received_state = option_index(swing, VERTICAL_SWING_OPTIONS);
 
-    if (this->vertical_swing_state_ == ~0UL) {
+    if (received_state == ~0UL) {
       ESP_LOGW(TAG, "Received unknown vertical swing position: %s", swing.c_str());
       return;
     }
+
+    if (!this->is_vertical_swing_allowed(received_state, this->mode)) {
+      const size_t fallback = this->vertical_swing_fallback(this->mode);
+      ESP_LOGW(TAG, "Received disallowed vertical swing position '%s' in mode %u; restoring '%s'", swing.c_str(),
+               static_cast<unsigned>(this->mode), VERTICAL_SWING_OPTIONS[fallback]);
+      this->vertical_swing_state_ = fallback;
+      this->vertical_swing_select_->publish_state(fallback);
+      this->on_vertical_swing_change(StringRef(VERTICAL_SWING_OPTIONS[fallback]));
+      return;
+    }
+
+    this->vertical_swing_state_ = received_state;
+    this->remember_vertical_swing_position(received_state, this->mode);
 
     if (this->vertical_swing_state_ != this->vertical_swing_select_->active_index().value_or(~0UL)) {
       this->vertical_swing_select_->publish_state(this->vertical_swing_state_);  // Set current vertical swing position
     }
   }
+}
+
+bool PanasonicAC::is_vertical_swing_allowed(size_t option_index, climate::ClimateMode mode) const {
+  const auto contains = [option_index](const std::vector<size_t> &options) {
+    return std::find(options.begin(), options.end(), option_index) != options.end();
+  };
+
+  if (mode == climate::CLIMATE_MODE_COOL)
+    return this->vertical_swing_cool_limit_.empty() || contains(this->vertical_swing_cool_limit_);
+  if (mode == climate::CLIMATE_MODE_HEAT || mode == climate::CLIMATE_MODE_HEAT_COOL)
+    return this->vertical_swing_heat_limit_.empty() || contains(this->vertical_swing_heat_limit_);
+  return true;
+}
+
+size_t PanasonicAC::vertical_swing_fallback(climate::ClimateMode mode) const {
+  if (this->vertical_swing_state_ != ~0UL && this->is_vertical_swing_allowed(this->vertical_swing_state_, mode))
+    return this->vertical_swing_state_;
+
+  if (mode == climate::CLIMATE_MODE_COOL && this->last_vertical_swing_cool_state_ != ~0UL &&
+      this->is_vertical_swing_allowed(this->last_vertical_swing_cool_state_, mode))
+    return this->last_vertical_swing_cool_state_;
+  if ((mode == climate::CLIMATE_MODE_HEAT || mode == climate::CLIMATE_MODE_HEAT_COOL) &&
+      this->last_vertical_swing_heat_state_ != ~0UL &&
+      this->is_vertical_swing_allowed(this->last_vertical_swing_heat_state_, mode))
+    return this->last_vertical_swing_heat_state_;
+
+  if (mode == climate::CLIMATE_MODE_COOL && !this->vertical_swing_cool_limit_.empty())
+    return this->vertical_swing_cool_limit_.front();
+  if ((mode == climate::CLIMATE_MODE_HEAT || mode == climate::CLIMATE_MODE_HEAT_COOL) &&
+      !this->vertical_swing_heat_limit_.empty())
+    return this->vertical_swing_heat_limit_.front();
+
+  // Empty lists mean unrestricted, and validated configured lists always contain
+  // at least one option. This is therefore only a defensive fallback.
+  return 0;
+}
+
+void PanasonicAC::remember_vertical_swing_position(size_t option_index, climate::ClimateMode mode) {
+  if (mode == climate::CLIMATE_MODE_COOL)
+    this->last_vertical_swing_cool_state_ = option_index;
+  else if (mode == climate::CLIMATE_MODE_HEAT || mode == climate::CLIMATE_MODE_HEAT_COOL)
+    this->last_vertical_swing_heat_state_ = option_index;
+}
+
+void PanasonicAC::enforce_vertical_swing_limit(climate::ClimateMode mode) {
+  if (this->vertical_swing_select_ == nullptr || this->vertical_swing_state_ == ~0UL ||
+      this->is_vertical_swing_allowed(this->vertical_swing_state_, mode))
+    return;
+
+  const size_t fallback = this->vertical_swing_fallback(mode);
+  ESP_LOGI(TAG, "Vertical swing position is not allowed in mode %u; changing to '%s'", static_cast<unsigned>(mode),
+           VERTICAL_SWING_OPTIONS[fallback]);
+  this->vertical_swing_state_ = fallback;
+  this->remember_vertical_swing_position(fallback, mode);
+  this->vertical_swing_select_->publish_state(fallback);
+  this->on_vertical_swing_change(StringRef(VERTICAL_SWING_OPTIONS[fallback]));
 }
 
 void PanasonicAC::update_nanoex(bool nanoex) {
@@ -241,30 +312,49 @@ void PanasonicAC::set_current_temperature_sensor(sensor::Sensor *current_tempera
                                                            });
 }
 
-void PanasonicAC::set_vertical_swing_select(select::Select *vertical_swing_select) {
+void PanasonicAC::set_vertical_swing_select(PanasonicACSelect *vertical_swing_select) {
   this->vertical_swing_select_ = vertical_swing_select;
-  this->vertical_swing_select_->add_on_state_callback([this](size_t index) {
+  this->vertical_swing_select_->add_on_control_callback([this](size_t index) {
     if (index == this->vertical_swing_state_)
       return;
     if (index >= sizeof(VERTICAL_SWING_OPTIONS) / sizeof(VERTICAL_SWING_OPTIONS[0])) {
-      ESP_LOGW(TAG, "Selected invalid vertical swing option index: %u", index);
+      ESP_LOGW(TAG, "Selected invalid vertical swing option index: %zu", index);
       return;
     }
+
+    if (!this->is_vertical_swing_allowed(index, this->mode)) {
+      const size_t fallback = this->vertical_swing_fallback(this->mode);
+      ESP_LOGW(TAG, "Vertical swing position '%s' is not allowed in mode %u; keeping '%s'",
+               VERTICAL_SWING_OPTIONS[index], static_cast<unsigned>(this->mode), VERTICAL_SWING_OPTIONS[fallback]);
+      this->vertical_swing_select_->publish_state(fallback);
+      return;
+    }
+
+    this->vertical_swing_select_->publish_state(index);
     this->on_vertical_swing_change(StringRef(VERTICAL_SWING_OPTIONS[index]));
   });
 }
 
-void PanasonicAC::set_horizontal_swing_select(select::Select *horizontal_swing_select) {
+void PanasonicAC::set_horizontal_swing_select(PanasonicACSelect *horizontal_swing_select) {
   this->horizontal_swing_select_ = horizontal_swing_select;
-  this->horizontal_swing_select_->add_on_state_callback([this](size_t index) {
+  this->horizontal_swing_select_->add_on_control_callback([this](size_t index) {
     if (index == this->horizontal_swing_state_)
       return;
     if (index >= sizeof(HORIZONTAL_SWING_OPTIONS) / sizeof(HORIZONTAL_SWING_OPTIONS[0])) {
-      ESP_LOGW(TAG, "Selected invalid horizontal swing option index: %u", index);
+      ESP_LOGW(TAG, "Selected invalid horizontal swing option index: %zu", index);
       return;
     }
+    this->horizontal_swing_select_->publish_state(index);
     this->on_horizontal_swing_change(StringRef(HORIZONTAL_SWING_OPTIONS[index]));
   });
+}
+
+void PanasonicAC::add_vertical_swing_cool_limit(size_t option_index) {
+  this->vertical_swing_cool_limit_.push_back(option_index);
+}
+
+void PanasonicAC::add_vertical_swing_heat_limit(size_t option_index) {
+  this->vertical_swing_heat_limit_.push_back(option_index);
 }
 
 void PanasonicAC::set_nanoex_switch(switch_::Switch *nanoex_switch) {

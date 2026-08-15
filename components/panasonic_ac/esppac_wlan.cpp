@@ -107,6 +107,7 @@ void PanasonicACWLAN::control(const climate::ClimateCall &call) {
 
     this->mode =
         *call.get_mode();   // Set mode manually since we won't receive a report from the AC if its the same mode again
+    this->enforce_vertical_swing_limit(this->mode);
     this->publish_state();  // Send this state, will get updated once next poll is executed
   }
 

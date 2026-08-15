@@ -42,6 +42,16 @@ climate:
       name: Panasonic AC Horizontal Swing Mode
     vertical_swing_select:
       name: Panasonic AC Vertical Swing Mode
+    # Optional safety limits for the vertical louver. Canonical values are:
+    # swing, auto, up, up_center, center, down_center, down
+    # limit_vertical_swing_cool:
+    #   - up
+    #   - up_center
+    #   - center
+    # limit_vertical_swing_heat:
+    #   - up_center
+    #   - center
+    #   - down_center
     outside_temperature:
       name: Panasonic AC Outside Temperature
     defrost_sensor:

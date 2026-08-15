@@ -7,12 +7,13 @@
 #include "esphome/components/binary_sensor/binary_sensor.h"
 #include "esphome/components/uart/uart.h"
 #include "esphome/core/component.h"
+#include "panasonic_ac_select.h"
 
 namespace esphome {
 
 namespace panasonic_ac {
 
-static const char *const VERSION = "2.6.0";
+static const char *const VERSION = "2.7.0";
 
 static const uint8_t BUFFER_SIZE = 128;  // The maximum size of a single packet (both receive and transmit)
 static const uint8_t READ_TIMEOUT = 20;  // The maximum time to wait before considering a packet complete
@@ -35,8 +36,10 @@ class PanasonicAC : public Component, public uart::UARTDevice, public climate::C
  public:
   void set_outside_temperature_sensor(sensor::Sensor *outside_temperature_sensor);
   void set_outside_temperature_offset(int8_t outside_temperature_offset);
-  void set_vertical_swing_select(select::Select *vertical_swing_select);
-  void set_horizontal_swing_select(select::Select *horizontal_swing_select);
+  void set_vertical_swing_select(PanasonicACSelect *vertical_swing_select);
+  void set_horizontal_swing_select(PanasonicACSelect *horizontal_swing_select);
+  void add_vertical_swing_cool_limit(size_t option_index);
+  void add_vertical_swing_heat_limit(size_t option_index);
   void set_nanoex_switch(switch_::Switch *nanoex_switch);
   void set_eco_switch(switch_::Switch *eco_switch);
   void set_econavi_switch(switch_::Switch *econavi_switch);
@@ -52,8 +55,8 @@ class PanasonicAC : public Component, public uart::UARTDevice, public climate::C
 
  protected:
   sensor::Sensor *outside_temperature_sensor_ = nullptr;        // Sensor to store outside temperature from queries
-  select::Select *vertical_swing_select_ = nullptr;             // Select to store manual position of vertical swing
-  select::Select *horizontal_swing_select_ = nullptr;           // Select to store manual position of horizontal swing
+  PanasonicACSelect *vertical_swing_select_ = nullptr;          // Select to store manual position of vertical swing
+  PanasonicACSelect *horizontal_swing_select_ = nullptr;        // Select to store manual position of horizontal swing
   switch_::Switch *nanoex_switch_ = nullptr;                    // Switch to toggle nanoeX on/off
   switch_::Switch *eco_switch_ = nullptr;                       // Switch to toggle eco mode on/off
   switch_::Switch *econavi_switch_ = nullptr;                   // Switch to toggle econavi mode on/off
@@ -62,8 +65,12 @@ class PanasonicAC : public Component, public uart::UARTDevice, public climate::C
   sensor::Sensor *current_power_consumption_sensor_ = nullptr;  // Sensor to store current power consumption from queries
   binary_sensor::BinarySensor *defrost_sensor_ = nullptr;       // Sensor to store defrost status
 
-  size_t vertical_swing_state_;
-  size_t horizontal_swing_state_;
+  size_t vertical_swing_state_ = ~0UL;
+  size_t horizontal_swing_state_ = ~0UL;
+  size_t last_vertical_swing_cool_state_ = ~0UL;
+  size_t last_vertical_swing_heat_state_ = ~0UL;
+  std::vector<size_t> vertical_swing_cool_limit_;
+  std::vector<size_t> vertical_swing_heat_limit_;
 
   int8_t current_temperature_offset_ = 0;  // current temperature offset to compensate internal sensor values
   int8_t outside_temperature_offset_ = 0;  // outside temperature offset to compensate internal sensor values
@@ -93,6 +100,10 @@ class PanasonicAC : public Component, public uart::UARTDevice, public climate::C
   void update_target_temperature(uint8_t raw_value);
   void update_swing_horizontal(const StringRef &swing);
   void update_swing_vertical(const StringRef &swing);
+  bool is_vertical_swing_allowed(size_t option_index, climate::ClimateMode mode) const;
+  size_t vertical_swing_fallback(climate::ClimateMode mode) const;
+  void remember_vertical_swing_position(size_t option_index, climate::ClimateMode mode);
+  void enforce_vertical_swing_limit(climate::ClimateMode mode);
   void update_nanoex(bool nanoex);
   void update_eco(bool eco);
   void update_econavi(bool econavi);

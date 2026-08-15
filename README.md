@@ -70,6 +70,31 @@ In order to find out which features are supported by your AC, check the remote t
 **Enabling unsupported features can lead to undefined behavior and may damage your AC. Make sure to check your remote or manual first.**
 **current_power_consumption is just as ESTIMATED value by the AC**
 
+## Limiting the vertical louver positions
+
+The optional `limit_vertical_swing_cool` and `limit_vertical_swing_heat` settings can prevent the vertical louver from moving to unsafe positions. This is useful when a door, cabinet or other obstacle is close to the indoor unit.
+
+```yaml
+    vertical_swing_select:
+      name: Panasonic AC Vertical Swing Mode
+
+    limit_vertical_swing_cool:
+      - up
+      - up_center
+      - center
+
+    limit_vertical_swing_heat:
+      - up_center
+      - center
+      - down_center
+```
+
+Allowed values are `swing`, `auto`, `up`, `up_center`, `center`, `down_center` and `down`. These are the canonical option names and are independent of labels configured through `option_labels`.
+
+Commands selecting a disallowed position are rejected before they are sent. If the AC reports a disallowed position set by another controller, the component restores the last allowed position. A mode change also checks the current position. The `heat_cool` mode uses `limit_vertical_swing_heat`, including its last allowed position and fallback behavior.
+
+The native ESPHome select exposes a fixed option list to API clients. Home Assistant will therefore continue to display every vertical position; selecting a restricted one immediately returns the select to the previous allowed value.
+
 ## Setting temperature offsets
 
 As the internal sensors reading might not reflect the actual temperature in the room or outside, you can optionally define a fixed offset for both sensors.
