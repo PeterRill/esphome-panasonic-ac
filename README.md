@@ -95,6 +95,17 @@ Commands selecting a disallowed position are rejected before they are sent. If t
 
 The native ESPHome select exposes a fixed option list to API clients. Home Assistant will therefore continue to display every vertical position; selecting a restricted one immediately returns the select to the previous allowed value.
 
+## Poll interval
+
+The optional `poll_interval` setting controls how often the component actively requests the current state from the AC. The default remains `5s` for CN-CNT and `30s` for CN-WLAN.
+
+```yaml
+    type: cnt
+    poll_interval: 2s
+```
+
+A shorter interval makes changes from the remote control or another controller visible sooner, but also increases traffic on the AC interface.
+
 ## Setting temperature offsets
 
 As the internal sensors reading might not reflect the actual temperature in the room or outside, you can optionally define a fixed offset for both sensors.

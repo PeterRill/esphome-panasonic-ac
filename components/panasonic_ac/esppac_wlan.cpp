@@ -193,7 +193,7 @@ void PanasonicACWLAN::control(const climate::ClimateCall &call) {
  */
 
 void PanasonicACWLAN::handle_poll() {
-  if (this->state_ == ACState::Ready && millis() - this->last_packet_sent_ > POLL_INTERVAL) {
+  if (this->state_ == ACState::Ready && millis() - this->last_packet_sent_ > this->poll_interval_) {
     ESP_LOGV(TAG, "Polling AC");
     send_command(CMD_POLL, sizeof(CMD_POLL));
   }

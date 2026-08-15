@@ -50,6 +50,7 @@ void PanasonicAC::setup() {
   this->set_supported_custom_presets({"Quiet", "Powerful"});
 
   ESP_LOGI(TAG, "Panasonic AC component v%s starting...", VERSION);
+  ESP_LOGCONFIG(TAG, "Poll interval: %u ms", static_cast<unsigned>(this->poll_interval_));
 }
 
 void PanasonicAC::loop() {

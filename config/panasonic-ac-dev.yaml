@@ -85,6 +85,9 @@ climate:
     # CN-CNT:
     type: cnt
 
+    # Optional, standardmäßig 5s bei CNT und 30s bei WLAN.
+    # poll_interval: 2s
+
     horizontal_swing_select:
       name: Horizontale Lamellenposition
       option_labels:

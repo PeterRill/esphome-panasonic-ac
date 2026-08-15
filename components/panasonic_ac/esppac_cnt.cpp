@@ -500,7 +500,7 @@ void PanasonicACCNT::send_packet(const std::vector<uint8_t> &packet, CommandType
  */
 
 void PanasonicACCNT::handle_poll() {
-  if (millis() - this->last_packet_sent_ > POLL_INTERVAL) {
+  if (millis() - this->last_packet_sent_ > this->poll_interval_) {
     ESP_LOGV(TAG, "Polling AC");
     send_command(CMD_POLL, CommandType::Normal, POLL_HEADER);
   }

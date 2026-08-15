@@ -51,6 +51,7 @@ CONF_DIAGNOSTIC_TEMPERATURE_BYTE_21 = "diagnostic_temperature_byte_21"
 CONF_OPTION_LABELS = "option_labels"
 CONF_LIMIT_VERTICAL_SWING_COOL = "limit_vertical_swing_cool"
 CONF_LIMIT_VERTICAL_SWING_HEAT = "limit_vertical_swing_heat"
+CONF_POLL_INTERVAL = "poll_interval"
 
 HORIZONTAL_SWING_OPTIONS = ["auto", "left", "left_center", "center", "right_center", "right"]
 
@@ -144,8 +145,23 @@ PANASONIC_CNT_SCHEMA = {
 CONFIG_SCHEMA = cv.All(
     cv.typed_schema(
         {
-            CONF_WLAN: climate.climate_schema(PanasonicACWLAN).extend(PANASONIC_COMMON_SCHEMA).extend(uart.UART_DEVICE_SCHEMA),
-            CONF_CNT: climate.climate_schema(PanasonicACCNT).extend(PANASONIC_COMMON_SCHEMA).extend(PANASONIC_CNT_SCHEMA).extend(uart.UART_DEVICE_SCHEMA),
+            CONF_WLAN: climate.climate_schema(PanasonicACWLAN)
+            .extend(PANASONIC_COMMON_SCHEMA)
+            .extend(
+                {
+                    cv.Optional(CONF_POLL_INTERVAL, default="30s"): cv.positive_time_period_milliseconds,
+                }
+            )
+            .extend(uart.UART_DEVICE_SCHEMA),
+            CONF_CNT: climate.climate_schema(PanasonicACCNT)
+            .extend(PANASONIC_COMMON_SCHEMA)
+            .extend(PANASONIC_CNT_SCHEMA)
+            .extend(
+                {
+                    cv.Optional(CONF_POLL_INTERVAL, default="5s"): cv.positive_time_period_milliseconds,
+                }
+            )
+            .extend(uart.UART_DEVICE_SCHEMA),
         }
     ),
     validate_vertical_swing_limits,
@@ -156,6 +172,7 @@ async def to_code(config):
     var = await climate.new_climate(config)
     await cg.register_component(var, config)
     await uart.register_uart_device(var, config)
+    cg.add(var.set_poll_interval(config[CONF_POLL_INTERVAL].total_milliseconds))
 
     if CONF_HORIZONTAL_SWING_SELECT in config:
         conf = config[CONF_HORIZONTAL_SWING_SELECT]

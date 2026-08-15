@@ -37,6 +37,9 @@ climate:
     # For DNSK-P11
     # type: wlan
 
+    # Optional polling interval. Defaults: 5s for CNT, 30s for WLAN.
+    # poll_interval: 2s
+
     name: Panasonic AC
     horizontal_swing_select:
       name: Panasonic AC Horizontal Swing Mode

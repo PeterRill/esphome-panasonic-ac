@@ -13,7 +13,7 @@ namespace esphome {
 
 namespace panasonic_ac {
 
-static const char *const VERSION = "2.7.0";
+static const char *const VERSION = "2.8.0";
 
 static const uint8_t BUFFER_SIZE = 128;  // The maximum size of a single packet (both receive and transmit)
 static const uint8_t READ_TIMEOUT = 20;  // The maximum time to wait before considering a packet complete
@@ -40,6 +40,7 @@ class PanasonicAC : public Component, public uart::UARTDevice, public climate::C
   void set_horizontal_swing_select(PanasonicACSelect *horizontal_swing_select);
   void add_vertical_swing_cool_limit(size_t option_index);
   void add_vertical_swing_heat_limit(size_t option_index);
+  void set_poll_interval(uint32_t poll_interval) { this->poll_interval_ = poll_interval; }
   void set_nanoex_switch(switch_::Switch *nanoex_switch);
   void set_eco_switch(switch_::Switch *eco_switch);
   void set_econavi_switch(switch_::Switch *econavi_switch);
@@ -90,6 +91,7 @@ class PanasonicAC : public Component, public uart::UARTDevice, public climate::C
   uint32_t last_read_;             // Stores the time at which the last read was done
   uint32_t last_packet_sent_;      // Stores the time at which the last packet was sent
   uint32_t last_packet_received_;  // Stores the time at which the last packet was received
+  uint32_t poll_interval_ = 5000;  // Overridden by the protocol-specific configuration default
 
   climate::ClimateTraits traits() override;
 
