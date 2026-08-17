@@ -72,6 +72,20 @@ climate:
     # current_power_consumption:
     #   name: Panasonic AC Power Consumption
 
+    # CNT only: filter cleaning reminder based on indoor-unit operating hours.
+    # filter_maintenance:
+    #   runtime:
+    #     name: Panasonic AC Filter Runtime
+    #   remaining:
+    #     name: Panasonic AC Filter Remaining
+    #   cleaning_required:
+    #     name: Panasonic AC Filter Cleaning Required
+    #   interval:
+    #     name: Panasonic AC Filter Cleaning Interval
+    #     initial_value: 200
+    #   reset:
+    #     name: Panasonic AC Filter Cleaned
+
     # Adapt according to your measurements
     # current_temperature_offset: 0
     # outside_temperature_offset: 0

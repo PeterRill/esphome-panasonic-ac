@@ -3,11 +3,17 @@
 
 #include "esphome/core/log.h"
 
+#include <algorithm>
+#include <cmath>
+
 namespace esphome {
 namespace panasonic_ac {
 namespace CNT {
 
 static const char *const TAG = "panasonic_ac.cz_tacg1";
+static const uint32_t FILTER_PREFERENCE_KEY = 0x8A6C4E21;
+static const uint32_t FILTER_PUBLISH_INTERVAL_MS = 60000;
+static const uint32_t FILTER_SAVE_INTERVAL_SECONDS = 3600;
 
 static climate::ClimateMode determine_mode(uint8_t mode) {
   uint8_t nib1 = (mode >> 4) & 0x0F;  // Left nib for mode
@@ -152,6 +158,22 @@ static const char *determine_custom_preset(uint8_t preset) {
   }
 }
 
+static bool is_filter_runtime_status(uint8_t status) {
+  switch (status) {
+    case 0x08:  // Fan only while the unit is otherwise off, e.g. post-run drying
+    case 0x30:  // Cool idle; the indoor fan normally keeps running
+    case 0x38:  // Cool startup
+    case 0x3C:  // Cool running
+    case 0x40:  // Heat idle; the indoor fan normally keeps running
+    case 0x48:  // Heat startup
+    case 0x4C:  // Heat running
+    case 0x60:  // Fan-only mode
+      return true;
+    default:
+      return false;
+  }
+}
+
 static bool determine_preset_nanoex(uint8_t preset) {
   uint8_t nib = (preset >> 4) & 0x04;  // Left nib for nanoex
 
@@ -207,7 +229,110 @@ uint16_t determine_power_consumption(uint8_t byte_28, uint8_t byte_29, uint8_t o
 void PanasonicACCNT::setup() {
   PanasonicAC::setup();
 
+  this->setup_filter_maintenance();
+
   ESP_LOGD(TAG, "Using CZ-TACG1 protocol via CN-CNT");
+}
+
+void PanasonicACCNT::set_filter_interval_number(PanasonicACNumber *number, float initial_value) {
+  this->filter_interval_number_ = number;
+  this->filter_interval_hours_ = initial_value;
+  number->add_on_control_callback([this](float value) { this->set_filter_interval(value); });
+}
+
+void PanasonicACCNT::set_filter_reset_button(PanasonicACButton *button) {
+  this->filter_reset_button_ = button;
+  button->add_on_action_callback([this]() { this->reset_filter_runtime(); });
+}
+
+bool PanasonicACCNT::filter_maintenance_enabled() const {
+  return this->filter_runtime_sensor_ != nullptr || this->filter_remaining_sensor_ != nullptr ||
+         this->filter_cleaning_required_sensor_ != nullptr || this->filter_interval_number_ != nullptr ||
+         this->filter_reset_button_ != nullptr;
+}
+
+void PanasonicACCNT::setup_filter_maintenance() {
+  if (!this->filter_maintenance_enabled())
+    return;
+
+  this->filter_maintenance_pref_ = global_preferences->make_preference<FilterMaintenancePreference>(
+      this->get_object_id_hash() ^ FILTER_PREFERENCE_KEY);
+
+  FilterMaintenancePreference restored{};
+  if (this->filter_maintenance_pref_.load(&restored) && std::isfinite(restored.interval_hours) &&
+      restored.interval_hours >= 50.0f && restored.interval_hours <= 1000.0f) {
+    this->filter_runtime_ms_ = static_cast<uint64_t>(restored.runtime_seconds) * 1000ULL;
+    this->filter_last_saved_seconds_ = restored.runtime_seconds;
+    this->filter_interval_hours_ = restored.interval_hours;
+  }
+
+  if (this->filter_interval_number_ != nullptr)
+    this->filter_interval_number_->publish_state(this->filter_interval_hours_);
+  this->publish_filter_maintenance();
+}
+
+void PanasonicACCNT::update_filter_runtime(uint8_t operational_status) {
+  if (!this->filter_maintenance_enabled())
+    return;
+
+  const uint32_t now = millis();
+  const bool fan_running = is_filter_runtime_status(operational_status);
+
+  if (this->filter_status_initialized_) {
+    const uint32_t elapsed = now - this->filter_last_status_ms_;
+    const uint32_t maximum_elapsed = std::max<uint32_t>(this->poll_interval_ * 3, 60000);
+    if (this->filter_fan_running_ && elapsed <= maximum_elapsed)
+      this->filter_runtime_ms_ += elapsed;
+  }
+
+  this->filter_status_initialized_ = true;
+  this->filter_fan_running_ = fan_running;
+  this->filter_last_status_ms_ = now;
+
+  if (now - this->filter_last_publish_ms_ >= FILTER_PUBLISH_INTERVAL_MS) {
+    this->publish_filter_maintenance();
+    this->filter_last_publish_ms_ = now;
+  }
+
+  const uint32_t runtime_seconds = this->filter_runtime_ms_ / 1000ULL;
+  if (runtime_seconds - this->filter_last_saved_seconds_ >= FILTER_SAVE_INTERVAL_SECONDS)
+    this->save_filter_maintenance();
+}
+
+void PanasonicACCNT::publish_filter_maintenance() {
+  const float runtime_hours = this->filter_runtime_ms_ / 3600000.0f;
+  const float remaining_hours = std::max(0.0f, this->filter_interval_hours_ - runtime_hours);
+  const bool cleaning_required = runtime_hours >= this->filter_interval_hours_;
+
+  if (this->filter_runtime_sensor_ != nullptr)
+    this->filter_runtime_sensor_->publish_state(runtime_hours);
+  if (this->filter_remaining_sensor_ != nullptr)
+    this->filter_remaining_sensor_->publish_state(remaining_hours);
+  if (this->filter_cleaning_required_sensor_ != nullptr)
+    this->filter_cleaning_required_sensor_->publish_state(cleaning_required);
+}
+
+void PanasonicACCNT::save_filter_maintenance() {
+  FilterMaintenancePreference state{};
+  state.runtime_seconds = static_cast<uint32_t>(this->filter_runtime_ms_ / 1000ULL);
+  state.interval_hours = this->filter_interval_hours_;
+  if (this->filter_maintenance_pref_.save(&state))
+    this->filter_last_saved_seconds_ = state.runtime_seconds;
+}
+
+void PanasonicACCNT::set_filter_interval(float interval_hours) {
+  this->filter_interval_hours_ = interval_hours;
+  if (this->filter_interval_number_ != nullptr)
+    this->filter_interval_number_->publish_state(interval_hours);
+  this->save_filter_maintenance();
+  this->publish_filter_maintenance();
+}
+
+void PanasonicACCNT::reset_filter_runtime() {
+  this->filter_runtime_ms_ = 0;
+  this->save_filter_maintenance();
+  this->publish_filter_maintenance();
+  ESP_LOGI(TAG, "Filter maintenance runtime reset");
 }
 
 void PanasonicACCNT::loop() {
@@ -413,11 +538,12 @@ void PanasonicACCNT::set_data(bool set) {
       }
     }
 
-    if (this->operational_status_sensor_ != nullptr)
+    if (this->rx_buffer_.size() > 12)
     {
-      if (this->rx_buffer_.size() > 12)
-      {
-        const uint8_t raw_status = this->rx_buffer_[12];
+      const uint8_t raw_status = this->rx_buffer_[12];
+      this->update_filter_runtime(raw_status);
+
+      if (this->operational_status_sensor_ != nullptr) {
         const char *status = determine_operational_status(raw_status);
 
         if (status != nullptr)
@@ -438,10 +564,10 @@ void PanasonicACCNT::set_data(bool set) {
           this->operational_status_sensor_->publish_state("Unknown");
         }
       }
-      else
-      {
-        ESP_LOGW(TAG, "Packet too short for operational status");
-      }
+    }
+    else if (this->operational_status_sensor_ != nullptr || this->filter_maintenance_enabled())
+    {
+      ESP_LOGW(TAG, "Packet too short for operational status");
     }
   }
 

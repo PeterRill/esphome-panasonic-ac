@@ -106,6 +106,27 @@ The optional `poll_interval` setting controls how often the component actively r
 
 A shorter interval makes changes from the remote control or another controller visible sooner, but also increases traffic on the AC interface.
 
+## Filter cleaning reminder (CN-CNT only)
+
+The optional `filter_maintenance` block tracks the indoor unit's operating hours and creates a configurable cleaning reminder. The counter includes the known fan, heating and cooling states, including heating and cooling idle because the indoor fan normally continues to run in those states. Short transition states are not counted.
+
+```yaml
+    filter_maintenance:
+      runtime:
+        name: Panasonic AC Filter Runtime
+      remaining:
+        name: Panasonic AC Filter Remaining
+      cleaning_required:
+        name: Panasonic AC Filter Cleaning Required
+      interval:
+        name: Panasonic AC Filter Cleaning Interval
+        initial_value: 200
+      reset:
+        name: Panasonic AC Filter Cleaned
+```
+
+The cleaning interval can be changed from Home Assistant between 50 and 1000 hours in 25-hour steps. Both the accumulated runtime and the selected interval survive restarts. Press the reset button after cleaning the filter. Runtime is saved once per operating hour to limit flash writes; an unexpected power loss can therefore lose up to one hour of accumulated time.
+
 ## Setting temperature offsets
 
 As the internal sensors reading might not reflect the actual temperature in the room or outside, you can optionally define a fixed offset for both sensors.

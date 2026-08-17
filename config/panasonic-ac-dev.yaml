@@ -135,6 +135,19 @@ climate:
     diagnostic_temperature_byte_21:
       name: Diagnostic Temperature Byte 21
 
+    filter_maintenance:
+      runtime:
+        name: Filter-Betriebsstunden
+      remaining:
+        name: Verbleibende Filterlaufzeit
+      cleaning_required:
+        name: Filterreinigung erforderlich
+      interval:
+        name: Filter-Reinigungsintervall
+        initial_value: 200
+      reset:
+        name: Filter gereinigt
+
     # eco_switch:
     #   name: Eco
 

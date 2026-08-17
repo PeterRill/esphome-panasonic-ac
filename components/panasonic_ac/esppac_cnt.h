@@ -2,7 +2,10 @@
 #include "esphome/components/climate/climate_mode.h"
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/components/text_sensor/text_sensor.h"
+#include "esphome/core/preferences.h"
 #include "esppac.h"
+#include "panasonic_ac_button.h"
+#include "panasonic_ac_number.h"
 
 namespace esphome {
 namespace panasonic_ac {
@@ -37,6 +40,13 @@ class PanasonicACCNT : public PanasonicAC {
   void set_diagnostic_temperature_byte_21_sensor(sensor::Sensor *sensor) {
     this->diagnostic_temperature_byte_21_sensor_ = sensor;
   }
+  void set_filter_runtime_sensor(sensor::Sensor *sensor) { this->filter_runtime_sensor_ = sensor; }
+  void set_filter_remaining_sensor(sensor::Sensor *sensor) { this->filter_remaining_sensor_ = sensor; }
+  void set_filter_cleaning_required_sensor(binary_sensor::BinarySensor *sensor) {
+    this->filter_cleaning_required_sensor_ = sensor;
+  }
+  void set_filter_interval_number(PanasonicACNumber *number, float initial_value);
+  void set_filter_reset_button(PanasonicACButton *button);
 
   void setup() override;
   void loop() override;
@@ -51,6 +61,25 @@ class PanasonicACCNT : public PanasonicAC {
   text_sensor::TextSensor *operational_status_sensor_{nullptr};
   sensor::Sensor *indoor_humidity_sensor_{nullptr};
   sensor::Sensor *diagnostic_temperature_byte_21_sensor_{nullptr};
+  sensor::Sensor *filter_runtime_sensor_{nullptr};
+  sensor::Sensor *filter_remaining_sensor_{nullptr};
+  binary_sensor::BinarySensor *filter_cleaning_required_sensor_{nullptr};
+  PanasonicACNumber *filter_interval_number_{nullptr};
+  PanasonicACButton *filter_reset_button_{nullptr};
+
+  struct FilterMaintenancePreference {
+    uint32_t runtime_seconds;
+    float interval_hours;
+  };
+
+  ESPPreferenceObject filter_maintenance_pref_;
+  uint64_t filter_runtime_ms_{0};
+  uint32_t filter_last_status_ms_{0};
+  uint32_t filter_last_publish_ms_{0};
+  uint32_t filter_last_saved_seconds_{0};
+  float filter_interval_hours_{200.0f};
+  bool filter_status_initialized_{false};
+  bool filter_fan_running_{false};
 
   void handle_poll();
   void handle_cmd();
@@ -62,6 +91,13 @@ class PanasonicACCNT : public PanasonicAC {
 
   bool verify_packet();
   void handle_packet();
+  bool filter_maintenance_enabled() const;
+  void setup_filter_maintenance();
+  void update_filter_runtime(uint8_t operational_status);
+  void publish_filter_maintenance();
+  void save_filter_maintenance();
+  void set_filter_interval(float interval_hours);
+  void reset_filter_runtime();
 };
 
 }  // namespace CNT

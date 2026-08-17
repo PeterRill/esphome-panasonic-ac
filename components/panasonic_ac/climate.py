@@ -1,17 +1,32 @@
 from esphome.const import (
     DEVICE_CLASS_HUMIDITY,
+    DEVICE_CLASS_DURATION,
+    DEVICE_CLASS_PROBLEM,
     DEVICE_CLASS_TEMPERATURE,
+    ENTITY_CATEGORY_CONFIG,
+    ENTITY_CATEGORY_DIAGNOSTIC,
     DEVICE_CLASS_POWER,
     STATE_CLASS_MEASUREMENT,
     UNIT_CELSIUS,
+    UNIT_HOUR,
     UNIT_PERCENT,
     UNIT_WATT,
 )
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.components import uart, climate, sensor, select, switch, binary_sensor, text_sensor
+from esphome.components import (
+    uart,
+    climate,
+    sensor,
+    select,
+    switch,
+    binary_sensor,
+    text_sensor,
+    number,
+    button,
+)
 
-AUTO_LOAD = ["switch", "sensor", "select", "binary_sensor", "text_sensor"]
+AUTO_LOAD = ["switch", "sensor", "select", "binary_sensor", "text_sensor", "number", "button"]
 DEPENDENCIES = ["uart"]
 
 panasonic_ac_ns = cg.esphome_ns.namespace("panasonic_ac")
@@ -28,6 +43,12 @@ PanasonicACSwitch = panasonic_ac_ns.class_(
 )
 PanasonicACSelect = panasonic_ac_ns.class_(
     "PanasonicACSelect", select.Select, cg.Component
+)
+PanasonicACNumber = panasonic_ac_ns.class_(
+    "PanasonicACNumber", number.Number, cg.Component
+)
+PanasonicACButton = panasonic_ac_ns.class_(
+    "PanasonicACButton", button.Button, cg.Component
 )
 
 
@@ -52,6 +73,13 @@ CONF_OPTION_LABELS = "option_labels"
 CONF_LIMIT_VERTICAL_SWING_COOL = "limit_vertical_swing_cool"
 CONF_LIMIT_VERTICAL_SWING_HEAT = "limit_vertical_swing_heat"
 CONF_POLL_INTERVAL = "poll_interval"
+CONF_FILTER_MAINTENANCE = "filter_maintenance"
+CONF_FILTER_RUNTIME = "runtime"
+CONF_FILTER_REMAINING = "remaining"
+CONF_FILTER_CLEANING_REQUIRED = "cleaning_required"
+CONF_FILTER_INTERVAL = "interval"
+CONF_FILTER_RESET = "reset"
+CONF_INITIAL_VALUE = "initial_value"
 
 HORIZONTAL_SWING_OPTIONS = ["auto", "left", "left_center", "center", "right_center", "right"]
 
@@ -99,6 +127,48 @@ VERTICAL_SWING_SELECT_SCHEMA = select.select_schema(
     }
 )
 
+FILTER_INTERVAL_SCHEMA = number.number_schema(
+    PanasonicACNumber,
+    icon="mdi:timer-cog-outline",
+    entity_category=ENTITY_CATEGORY_CONFIG,
+).extend(
+    {
+        cv.Optional(CONF_INITIAL_VALUE, default=200): cv.float_range(min=50, max=1000),
+    }
+).extend(cv.COMPONENT_SCHEMA)
+
+FILTER_MAINTENANCE_SCHEMA = cv.Schema(
+    {
+        cv.Required(CONF_FILTER_RUNTIME): sensor.sensor_schema(
+            unit_of_measurement=UNIT_HOUR,
+            accuracy_decimals=1,
+            device_class=DEVICE_CLASS_DURATION,
+            state_class=STATE_CLASS_MEASUREMENT,
+            icon="mdi:air-filter",
+            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+        ),
+        cv.Required(CONF_FILTER_REMAINING): sensor.sensor_schema(
+            unit_of_measurement=UNIT_HOUR,
+            accuracy_decimals=1,
+            device_class=DEVICE_CLASS_DURATION,
+            state_class=STATE_CLASS_MEASUREMENT,
+            icon="mdi:timer-sand",
+            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+        ),
+        cv.Required(CONF_FILTER_CLEANING_REQUIRED): binary_sensor.binary_sensor_schema(
+            device_class=DEVICE_CLASS_PROBLEM,
+            icon="mdi:air-filter",
+            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+        ),
+        cv.Required(CONF_FILTER_INTERVAL): FILTER_INTERVAL_SCHEMA,
+        cv.Required(CONF_FILTER_RESET): button.button_schema(
+            PanasonicACButton,
+            icon="mdi:air-filter",
+            entity_category=ENTITY_CATEGORY_CONFIG,
+        ).extend(cv.COMPONENT_SCHEMA),
+    }
+)
+
 PANASONIC_COMMON_SCHEMA = {
     cv.Optional(CONF_HORIZONTAL_SWING_SELECT): HORIZONTAL_SWING_SELECT_SCHEMA,
     cv.Optional(CONF_VERTICAL_SWING_SELECT): VERTICAL_SWING_SELECT_SCHEMA,
@@ -140,6 +210,7 @@ PANASONIC_CNT_SCHEMA = {
         device_class=DEVICE_CLASS_TEMPERATURE,
         state_class=STATE_CLASS_MEASUREMENT,
     ),
+    cv.Optional(CONF_FILTER_MAINTENANCE): FILTER_MAINTENANCE_SCHEMA,
 }
 
 CONFIG_SCHEMA = cv.All(
@@ -236,3 +307,31 @@ async def to_code(config):
     if CONF_DIAGNOSTIC_TEMPERATURE_BYTE_21 in config:
         sens = await sensor.new_sensor(config[CONF_DIAGNOSTIC_TEMPERATURE_BYTE_21])
         cg.add(var.set_diagnostic_temperature_byte_21_sensor(sens))
+
+    if CONF_FILTER_MAINTENANCE in config:
+        conf = config[CONF_FILTER_MAINTENANCE]
+
+        runtime = await sensor.new_sensor(conf[CONF_FILTER_RUNTIME])
+        cg.add(var.set_filter_runtime_sensor(runtime))
+
+        remaining = await sensor.new_sensor(conf[CONF_FILTER_REMAINING])
+        cg.add(var.set_filter_remaining_sensor(remaining))
+
+        due = await binary_sensor.new_binary_sensor(conf[CONF_FILTER_CLEANING_REQUIRED])
+        cg.add(var.set_filter_cleaning_required_sensor(due))
+
+        interval_conf = conf[CONF_FILTER_INTERVAL]
+        interval = await number.new_number(
+            interval_conf, min_value=50, max_value=1000, step=25
+        )
+        await cg.register_component(interval, interval_conf)
+        cg.add(
+            var.set_filter_interval_number(
+                interval, interval_conf[CONF_INITIAL_VALUE]
+            )
+        )
+
+        reset_conf = conf[CONF_FILTER_RESET]
+        reset = await button.new_button(reset_conf)
+        await cg.register_component(reset, reset_conf)
+        cg.add(var.set_filter_reset_button(reset))
