@@ -108,7 +108,7 @@ A shorter interval makes changes from the remote control or another controller v
 
 ## Filter cleaning reminder (CN-CNT only)
 
-The optional `filter_maintenance` block tracks the indoor unit's operating hours and creates a configurable cleaning reminder. The counter includes the known fan, heating and cooling states, including heating and cooling idle because the indoor fan normally continues to run in those states. Short transition states are not counted.
+The optional `filter_maintenance` block tracks the indoor unit's operating hours and creates a configurable cleaning reminder. The counter includes the known fan, heating, cooling and dry states, including idle states because the indoor fan normally continues to run in those states. Short transition states are not counted.
 
 ```yaml
     filter_maintenance:

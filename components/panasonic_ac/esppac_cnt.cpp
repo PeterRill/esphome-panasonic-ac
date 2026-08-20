@@ -61,6 +61,13 @@ static const char *determine_operational_status(uint8_t status)
   case 0x30:
     return "Cool Idle";
 
+  case 0x2C:
+    return "Dry Running";
+  case 0x28:
+    return "Dry Startup";
+  case 0x20:
+    return "Dry Idle";
+
   case 0x08:
     return "Fan Only (Unit Off)";
   case 0x60:
@@ -164,6 +171,9 @@ static bool is_filter_runtime_status(uint8_t status) {
     case 0x30:  // Cool idle; the indoor fan normally keeps running
     case 0x38:  // Cool startup
     case 0x3C:  // Cool running
+    case 0x20:  // Dry idle
+    case 0x28:  // Dry startup
+    case 0x2C:  // Dry running
     case 0x40:  // Heat idle; the indoor fan normally keeps running
     case 0x48:  // Heat startup
     case 0x4C:  // Heat running
